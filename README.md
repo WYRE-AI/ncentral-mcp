@@ -126,15 +126,27 @@ Token.
 
 ### Environment variables
 
+Copy [`.env.example`](.env.example) and set the variables below.
+
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NCENTRAL_SERVER_URL` | yes | Base URL of your N-central server, e.g. `https://ncentral.example.com` |
-| `NCENTRAL_JWT` | yes | User-API Token (JWT) generated in the N-central UI |
-| `MCP_TRANSPORT` | no | `stdio` (default) or `http` |
-| `MCP_HTTP_PORT` | no | HTTP port (default `8080`) |
-| `MCP_HTTP_HOST` | no | HTTP bind host (default `0.0.0.0`) |
-| `AUTH_MODE` | no | `env` (default) or `gateway` (read per-request credential headers) |
-| `LOG_LEVEL` | no | `debug`, `info` (default), `warn`, `error` — all logs go to stderr |
+| `NCENTRAL_SERVER_URL` | For stdio and `AUTH_MODE=env` | Base URL of your N-central server, e.g. `https://ncentral.example.com`. The Compose gateway service does not load this variable. |
+| `NCENTRAL_JWT` | For stdio and `AUTH_MODE=env` | User-API Token (JWT) generated in the N-central UI. The Compose gateway service does not load this variable. |
+| `MCP_TRANSPORT` | No | `stdio` (default) or `http` |
+| `AUTH_MODE` | No | `gateway` (Docker image and Compose default) or `env`. Gateway mode requires `x-ncentral-server-url` and `x-ncentral-jwt` on each `/mcp` request and never falls back to `NCENTRAL_*`. `env` uses those variables only after S2S auth succeeds. |
+| `CONDUIT_S2S_SECRET` | Yes for HTTP | Service-to-service secret. Generate with `openssl rand -hex 32`. The HTTP server logs an error and exits non-zero when this is empty or a known placeholder (`changeme`, `your-s2s-secret`, `secret`, `placeholder`, and similar public examples). Compose will not start without it. Never commit a real value. The value is never logged. |
+| `MCP_ALLOW_INSECURE_DEV` | No | Set to exactly `1` only for local development to start HTTP without `CONDUIT_S2S_SECRET`. The process logs a warning, does not enforce `X-Gateway-S2S`, and forces the listener onto `127.0.0.1` even if `MCP_HTTP_HOST` is a wider address. A known placeholder secret is still refused. |
+| `MCP_HTTP_HOST` | No | Bind address when `MCP_TRANSPORT=http`. Defaults to `127.0.0.1` when unset. A configured `CONDUIT_S2S_SECRET` honors this value. The container image sets `0.0.0.0`. Without a secret, `MCP_ALLOW_INSECURE_DEV=1` binds `127.0.0.1` only. |
+| `MCP_HTTP_PORT` | No | HTTP port. Defaults to `8080`. |
+| `LOG_LEVEL` | No | `debug`, `info` (default), `warn`, `error` — all logs go to stderr |
+
+`/health` stays unauthenticated and does not read credentials. The stdio transport does not use `CONDUIT_S2S_SECRET`.
+
+### HTTP authentication
+
+With `MCP_TRANSPORT=http` and `CONDUIT_S2S_SECRET` set, every `/mcp` request must include `X-Gateway-S2S`. The check is `verifyS2sHeader` in [`src/s2s-verify.ts`](src/s2s-verify.ts): the header value is `t=<unix seconds>,v1=<hex>`, where the hex is HMAC-SHA256 of the literal string `t=<unix seconds>` keyed with `CONDUIT_S2S_SECRET` (64 lowercase hex characters). The timestamp must be within 300 seconds of the server clock. A missing or invalid header returns HTTP 401 before vendor credentials are read.
+
+In `AUTH_MODE=gateway`, `/mcp` also requires `x-ncentral-server-url` and `x-ncentral-jwt`. Those headers are the only credential source for that request. A request missing either header returns HTTP 401 and does not fall back to `NCENTRAL_SERVER_URL` / `NCENTRAL_JWT`.
 
 ### stdio (Claude Desktop / local MCP client)
 
@@ -166,38 +178,74 @@ Claude Desktop config:
 ### HTTP (Streamable HTTP)
 
 ```bash
+CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" \
 MCP_TRANSPORT=http \
+AUTH_MODE=env \
 NCENTRAL_SERVER_URL=https://ncentral.example.com \
 NCENTRAL_JWT=eyJ... \
 node dist/http.js
 ```
 
 Endpoints: `POST /mcp` (MCP protocol, stateless JSON responses) and `GET /health`
-(liveness — never requires credentials).
+(liveness — unauthenticated, and it does not read credentials).
+
+Local HTTP without a secret is development-only. It binds `127.0.0.1` only and logs a warning. A non-loopback `MCP_HTTP_HOST` is ignored and the override is logged:
+
+```bash
+MCP_TRANSPORT=http MCP_ALLOW_INSECURE_DEV=1 npm run start:http
+```
 
 ### Docker
 
+The image listens on `0.0.0.0` inside the container (`MCP_HTTP_HOST`) and defaults to `AUTH_MODE=gateway`. Publish the port on loopback and pass the S2S secret. In gateway mode, N-central credentials arrive on each request as headers; they are not read from the environment.
+
 ```bash
-docker run -p 8080:8080 \
+docker run \
+  -e CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" \
+  -p 127.0.0.1:8080:8080 \
+  ghcr.io/wyre-ai/ncentral-mcp:latest
+```
+
+Compose refuses to start when `CONDUIT_S2S_SECRET` is unset. The checked-in gateway service does not set `NCENTRAL_SERVER_URL` or `NCENTRAL_JWT` and does not use `env_file`, so a project `.env` cannot inject static vendor credentials into the container. Compose still interpolates `CONDUIT_S2S_SECRET` from that file. The port publish is `127.0.0.1:8080:8080`:
+
+```bash
+CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" docker compose up
+```
+
+Single-tenant HTTP (`AUTH_MODE=env`) still requires the S2S secret, then uses `NCENTRAL_SERVER_URL` and `NCENTRAL_JWT`. It is separate from the gateway Compose service:
+
+```bash
+docker run \
+  -e CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" \
   -e AUTH_MODE=env \
   -e NCENTRAL_SERVER_URL=https://ncentral.example.com \
   -e NCENTRAL_JWT=eyJ... \
+  -p 127.0.0.1:8080:8080 \
   ghcr.io/wyre-ai/ncentral-mcp:latest
 ```
 
 ## Gateway mode
 
-Behind the WYRE MCP gateway, set `AUTH_MODE=gateway` (the container default). The
-gateway injects per-request credential headers:
+Behind the WYRE MCP gateway, set `AUTH_MODE=gateway` (the container default). Every `/mcp` request must include a valid `X-Gateway-S2S` proof and the per-request credential headers:
 
 | Header | Maps to |
 |--------|---------|
+| `X-Gateway-S2S` | `t=<unix seconds>,v1=<hex hmac-sha256 of t=<unix seconds>>` keyed with `CONDUIT_S2S_SECRET` |
 | `x-ncentral-server-url` | `NCENTRAL_SERVER_URL` |
 | `x-ncentral-jwt` | `NCENTRAL_JWT` |
 
-Requests without credentials are never rejected — `tools/list` works without them, and
-`tools/call` fails with a clear configuration error. When the headers change between
-requests (different tenant), the internal API client is rebuilt automatically.
+```typescript
+const response = await fetch('http://gateway:8080/mcp', {
+  method: 'POST',
+  headers: {
+    'x-gateway-s2s': '<proof signed with CONDUIT_S2S_SECRET>',
+    'x-ncentral-server-url': 'https://ncentral.example.com',
+    'x-ncentral-jwt': 'eyJ...',
+  },
+});
+```
+
+A request missing `x-ncentral-server-url` or `x-ncentral-jwt` gets HTTP 401 and does not fall back to `NCENTRAL_*` in the process environment. When the headers change between requests (different tenant), the internal API client is rebuilt automatically. In `AUTH_MODE=env`, `/mcp` still requires `X-Gateway-S2S`; vendor credentials come from the environment.
 
 ## On-prem N-central notes
 
@@ -208,9 +256,12 @@ requests (different tenant), the internal API client is rebuilt automatically.
   Node.js at it:
 
   ```bash
-  docker run -p 8080:8080 \
+  docker run \
+    -p 127.0.0.1:8080:8080 \
     -v /path/to/ca.pem:/certs/ca.pem:ro \
     -e NODE_EXTRA_CA_CERTS=/certs/ca.pem \
+    -e CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" \
+    -e AUTH_MODE=env \
     -e NCENTRAL_SERVER_URL=https://ncentral.internal.example.com \
     -e NCENTRAL_JWT=eyJ... \
     ghcr.io/wyre-ai/ncentral-mcp:latest

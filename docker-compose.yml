@@ -1,0 +1,36 @@
+services:
+  # Gateway mode. The N-central server URL and User-API token arrive per
+  # request on x-ncentral-server-url and x-ncentral-jwt. Do not set
+  # NCENTRAL_SERVER_URL, NCENTRAL_JWT, or env_file here — that would put
+  # static vendor credentials in the container. Compose interpolates
+  # CONDUIT_S2S_SECRET from the project .env. For AUTH_MODE=env, pass
+  # NCENTRAL_SERVER_URL and NCENTRAL_JWT on that process instead (see the README).
+  ncentral-mcp:
+    build:
+      context: .
+      secrets:
+        - npmrc
+    image: ncentral-mcp:latest
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      # 0.0.0.0 is the interface inside the container. The port publish above
+      # stays on loopback. Startup still refuses to run without a real
+      # CONDUIT_S2S_SECRET.
+      - MCP_TRANSPORT=http
+      - MCP_HTTP_PORT=8080
+      - MCP_HTTP_HOST=0.0.0.0
+      - AUTH_MODE=gateway
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - NODE_ENV=production
+      - CONDUIT_S2S_SECRET=${CONDUIT_S2S_SECRET:?set CONDUIT_S2S_SECRET}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+secrets:
+  npmrc:
+    file: ${HOME}/.npmrc

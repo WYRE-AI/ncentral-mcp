@@ -35,6 +35,10 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
+# Bind every interface inside the container. Host publish is loopback in
+# docker-compose. Startup still refuses to run without a real
+# CONDUIT_S2S_SECRET. MCP_ALLOW_INSECURE_DEV=1 forces 127.0.0.1 even while
+# this host is 0.0.0.0. Gateway mode never falls back to image env credentials.
 ENV NODE_ENV=production \
     MCP_TRANSPORT=http \
     MCP_HTTP_PORT=8080 \

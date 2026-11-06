@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: https://npm.pkg.github.com
+          cache: npm
+      - run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+  server-json:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate server.json against the MCP Registry schema
+        run: |
+          curl -fsS -X POST https://registry.modelcontextprotocol.io/v0.1/validate \
+            -H 'Content-Type: application/json' \
+            --data @server.json | tee /tmp/validate.json
+          jq -e '.valid == true' /tmp/validate.json >/dev/null

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.WYRE-AI/ncentral-mcp",
+  "title": "N-able N-central",
+  "description": "MCP server for N-able N-central RMM: org units, devices, monitoring, tasks, maintenance windows.",
+  "repository": {
+    "url": "https://github.com/WYRE-AI/ncentral-mcp",
+    "source": "github"
+  },
+  "version": "0.0.0",
+  "websiteUrl": "https://github.com/WYRE-AI/ncentral-mcp",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/wyre-ai/ncentral-mcp:0.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "node",
+          "description": "The image defaults to the S2S-gated HTTP entrypoint; run the stdio entrypoint instead."
+        },
+        {
+          "type": "positional",
+          "value": "dist/index.js",
+          "description": "stdio entrypoint script."
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "NCENTRAL_SERVER_URL",
+          "description": "Base URL of your N-central server (e.g. https://ncentral.example.com)",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "NCENTRAL_JWT",
+          "description": "N-central User-API Token (JWT) generated on the user's API Access tab",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "description": "Log verbosity: debug, info, warn, error",
+          "isRequired": false,
+          "default": "info",
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

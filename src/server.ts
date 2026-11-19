@@ -6,6 +6,7 @@ import {
 import { getNavigationTools, handleNavigate, handleStatus } from './domains/navigation.js';
 import { getAllDomainTools, getHandlerForTool } from './domains/index.js';
 import { logger } from './utils/logger.js';
+import { withErrorHint } from './utils/errors.js';
 import type { DomainName } from './utils/types.js';
 
 export function createServer(): Server {
@@ -54,7 +55,7 @@ export function createServer(): Server {
       const message = error instanceof Error ? error.message : String(error);
       logger.error('Tool call failed', { tool: name, error: message });
       return {
-        content: [{ type: 'text' as const, text: `Error: ${message}` }],
+        content: [{ type: 'text' as const, text: `Error: ${withErrorHint(message)}` }],
         isError: true,
       };
     }

@@ -15,6 +15,13 @@ describe('withErrorHint', () => {
     expect(out).toMatch(/new JWT/);
   });
 
+  it('does not match partial signatures', () => {
+    const otherCode = 'CustomAxisFault: 4001 [tid: y] Unable to validate UI session: null.';
+    const noSession = 'CustomAxisFault: 4000 [tid: y] SessionID not found or has expired.';
+    expect(withErrorHint(otherCode)).toBe(otherCode);
+    expect(withErrorHint(noSession)).toBe(noSession);
+  });
+
   it('leaves other errors unchanged', () => {
     const msg =
       'GET /api/devices failed with HTTP 401: UNAUTHORIZED: UserPermissionException: User does not have permissions to view the devices.';

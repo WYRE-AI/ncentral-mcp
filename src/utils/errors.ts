@@ -13,11 +13,12 @@ const UI_SESSION_HINT =
 
 /**
  * Returns the error message with a hint appended when the error is the DMS
- * "CustomAxisFault: 4000 ... Unable to validate UI session" fault. Other
+ * "CustomAxisFault: 4000 ... Unable to validate UI session" fault (both parts
+ * must be present). Other
  * messages are returned unchanged.
  */
 export function withErrorHint(message: string): string {
-  if (/Unable to validate UI session/i.test(message) || /CustomAxisFault:\s*4000\b/.test(message)) {
+  if (/CustomAxisFault:\s*4000\b/.test(message) && /Unable to validate UI session/i.test(message)) {
     return `${message}\n\nHint: ${UI_SESSION_HINT}`;
   }
   return message;

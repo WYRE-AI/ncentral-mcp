@@ -224,6 +224,15 @@ docker run \
   ghcr.io/wyre-ai/ncentral-mcp:latest
 ```
 
+stdio from the image (the form listed in the MCP Registry `server.json`) overrides the default HTTP command, so no S2S secret is needed:
+
+```bash
+docker run -i --rm \
+  -e NCENTRAL_SERVER_URL=https://ncentral.example.com \
+  -e NCENTRAL_JWT=eyJ... \
+  ghcr.io/wyre-ai/ncentral-mcp:latest node dist/index.js
+```
+
 ## Gateway mode
 
 Behind the WYRE MCP gateway, set `AUTH_MODE=gateway` (the container default). Every `/mcp` request must include a valid `X-Gateway-S2S` proof and the per-request credential headers:
@@ -288,8 +297,10 @@ npm run build       # tsup → dist/
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Releases are automated with
-semantic-release; the container image is published to
-`ghcr.io/wyre-ai/ncentral-mcp`.
+semantic-release through the shared `WYRE-AI/reusable-workflows` release pipeline:
+each release pushes `ghcr.io/wyre-ai/ncentral-mcp:vX.Y.Z` (plus `:latest`) and
+publishes `server.json`, stamped with that tag, to the MCP Registry as
+`io.github.WYRE-AI/ncentral-mcp`.
 
 ## License
 

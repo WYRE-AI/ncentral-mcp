@@ -1,3 +1,10 @@
+## [Unreleased]
+
+
+### Added
+
+* **registry:** MCP Registry OCI package configuration for `io.github.WYRE-AI/ncentral-mcp`: `server.json` (stdio via `ghcr.io/wyre-ai/ncentral-mcp:vX.Y.Z`) and the release path through `WYRE-AI/reusable-workflows` `mcp-server-release.yml`, which pushes the versioned image tag and publishes the stamped `server.json` ([#27](https://github.com/WYRE-AI/ncentral-mcp/pull/27))
+
 ## [1.0.3](https://github.com/wyre-technology/ncentral-mcp/compare/v1.0.2...v1.0.3) (2026-07-29)
 
 
